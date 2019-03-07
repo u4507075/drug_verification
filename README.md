@@ -4,6 +4,7 @@
 2. Assistant Professor Krit Khwanngern, MD, Faculty of Medicine, Chiang Mai University, Chiang Mai, Thailand
 3. Associate Professor Arintaya Phrommintikul, MD, Faculty of Medicine, Chiang Mai University, Chiang Mai, Thailand
 4. Associate Professor Nipon Theera-Umpon, PhD, Biomedical Engineering Institute, Chiang Mai University
+5. Dr Phichayut Phinyo, MD, Faculty of Medicine, Chiang Mai University, Chiang Mai, Thailand
 5. Terence Siganakis, CEO, Growing Data Pty Ltd
 6. Alexander Dokumentov, Data Scientist, Growing Data Pty Ltd
 
@@ -12,7 +13,7 @@
 2. Sittipong Moraray
 3. Pimpaka Chuamsakul
 4. Pitupoom Chumpoo
-5. Prawinee Mokmoongmuang
+5. Tanapong Chainakul
 
 ## Duration
 6 months (March - August 2019)

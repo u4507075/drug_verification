@@ -1,4 +1,4 @@
-# Auto drug verification
+# The development of machine learning models for auto drug verification
 ## Researchers
 1. Assistant Professor Piyapong Khumrin, MD, Faculty of Medicine, Chiang Mai University, Chiang Mai, Thailand
 2. Assistant Professor Krit Khwanngern, MD, Faculty of Medicine, Chiang Mai University, Chiang Mai, Thailand

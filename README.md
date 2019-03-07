@@ -84,7 +84,7 @@ Data from 2006 - 2016 are used to train machine learning models and data from 20
 ## How to use
 1. Clone the project and change to dev branch
 ```
-git clone https://github.com/u4507075/icd_10.git
+git clone https://github.com/u4507075/drug_verification.git
 cd icd_10
 git checkout dev
 ```

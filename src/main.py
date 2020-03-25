@@ -20,7 +20,7 @@ import gensim
 import tensorflow as tf
 from keras import backend as K
 import codecs
-
+import re
 num_cores = 4
 
 num_CPU = 1
@@ -269,100 +269,151 @@ for i in range(len(similar_words)):
                 print(str(similar_words[i][1])+' '+drug_map[similar_words[i][0]])
 
 '''
-'''
-df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
-df['drug_name'] = df['drug_name'].str.strip()
-drug_map = dict(zip(df['drug'], df['drug_name']))
-model = gensim.models.Word2Vec.load(path+'model')
-icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
-icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
+def validate():
+        df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
+        df['drug_name'] = df['drug_name'].str.strip()
+        drug_map = dict(zip(df['drug'], df['drug_name']))
+        model = gensim.models.Word2Vec.load(path+'model')
+        icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
+        icd10['cdesc'] = icd10['cdesc'].str.strip()
+        icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
 
-print(len(drug_map))
-print(len(model.wv.vocab))
-df = pd.read_csv(path+'testset/raw/dru.csv',index_col=0)
-df['drug_name'] = df['drug_name'].str.strip()
-df['icd10_name'] = df['icd10'].map(icd10_map)
-df['icd10_name'] = df['icd10_name'].str.strip()
-remove_file('result.csv')
-remove_file('validation.txt')
-for txn in df['txn'].unique().tolist():
-        d = df[df['txn']==txn]
-        #print(d)
-        p = []
-        dx = []
-        for x in d['icd10'].unique().tolist():
-                if x in model.wv.vocab:
-                        dx.append(x)
-        data = []
-        rank = []
-        top5 = []
-        if len(dx)>0:
-                similar_words = model.wv.most_similar(positive=dx, topn=5000)
-                n = 0
-                for i in range(len(similar_words)):
-                        da = [txn]
-                        if similar_words[i][0] in drug_map:
-                                da.append(similar_words[i][0])
-                                da.append(drug_map[similar_words[i][0]])
-                                da.append(similar_words[i][1])
-                                p.append(similar_words[i][0])
-                                #print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
-                                data.append(da)
-                                if similar_words[i][0] in d['drug'].unique().tolist():
-                                        rank.append([n,drug_map[similar_words[i][0]]])
-                                if len(top5) < 5:
-                                        top5.append([n, drug_map[similar_words[i][0]]])
-                                n = n+1
-        dataf = pd.DataFrame(data,columns=['txn','predicted_drug','predicted_drug_name','similarity'])
-        result = pd.merge(d,dataf,how='outer',on='txn')
-        #print(result)
-        #save_file(result,path+'result.csv')
-        txt = ''
-        txt = txt + '#####################' + '\n'
-        txt = txt + str(len(set(d['drug'].unique().tolist()) & set(p))*100/len(d['drug'].unique().tolist()))+'% '+str(len(set(d['drug'].unique().tolist()) & set(p)))+'/'+str(len(d['drug'].unique().tolist())) +' '+str(len(p)) + '\n'
-        txt = txt + str(d['icd10_name'].unique().tolist()) + '\n'
-        txt = txt + '###All actual drugs###' + '\n'
-        txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
-        txt = txt + '###Actual drug rank###' + '\n'
-        txt = txt + str(rank) + '\n'
-        txt = txt + '###Top 5 predicted drugs###' + '\n'
-        txt = txt + str(top5) + '\n'
-        txt = txt + '#####################' + '\n'
-        print(txt)
-        with codecs.open(path+'validation.txt', 'a', encoding='utf8') as f:
-                f.write(txt)
+        print(len(drug_map))
+        print(len(model.wv.vocab))
+        df = pd.read_csv(path+'testset/raw/dru.csv',index_col=0)
+        df['drug_name'] = df['drug_name'].str.strip()
+        df['icd10_name'] = df['icd10'].map(icd10_map)
+        df['icd10_name'] = df['icd10_name'].str.strip()
+        remove_file(path+'result.csv')
+        remove_file(path+'validation.txt')
+        for txn in df['txn'].unique().tolist():
+                d = df[df['txn']==txn]
+                #print(d)
+                p = []
+                dx = []
+                for x in d['icd10'].unique().tolist():
+                        if x in model.wv.vocab and x in icd10_map:
+                                dx.append(x)
+                data = []
+                rank = []
+                top5 = []
+                if len(dx)>0:
+                        '''
+                        #Approach 1: calcualte similar wards from all dx at once
+                        similar_words = model.wv.most_similar(positive=dx, topn=5000)
+                        n = 0
+                        for i in range(len(similar_words)):
+                                da = [txn]
+                                if similar_words[i][0] in drug_map:
+                                        da.append(similar_words[i][0])
+                                        da.append(drug_map[similar_words[i][0]])
+                                        da.append(similar_words[i][1])
+                                        p.append(similar_words[i][0])
+                                        #print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
+                                        data.append(da)
+                                        if similar_words[i][0] in d['drug'].unique().tolist():
+                                                rank.append([n,drug_map[similar_words[i][0]]])
+                                        if len(top5) < 5:
+                                                top5.append([n, drug_map[similar_words[i][0]]])
+                                        n = n+1
+                        '''
+                        #Approach 2: get each dx and treat the rest of dx is negative
+                        txt = ''
+                        txt = txt + '#####################' + '\n'
+                        txt = txt + str(d['icd10_name'].unique().tolist()) + '\n\n'
+                        for dd in dx:
+                                rank = []
+                                top5 = []
+                                neg = dx.copy().remove(dd)
+                                similar_words = model.wv.most_similar(positive=[dd], negative=neg, topn=5000)
+                                n = 0
+                                for i in range(len(similar_words)):
+                                        da = [txn]
+                                        if similar_words[i][0] in drug_map:
+                                                da.append(similar_words[i][0])
+                                                da.append(drug_map[similar_words[i][0]])
+                                                da.append(similar_words[i][1])
+                                                p.append(similar_words[i][0])
+                                                # print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
+                                                data.append(da)
+                                                if similar_words[i][0] in d['drug'].unique().tolist():
+                                                        rank.append([n, drug_map[similar_words[i][0]]])
+                                                if len(top5) < 5:
+                                                        top5.append([similar_words[i][1], drug_map[similar_words[i][0]]])
+                                                n = n + 1
+
+                                txt = txt + str(icd10_map[dd]) + '\n'
+                                txt = txt + '###All actual drugs###' + '\n'
+                                txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
+                                txt = txt + '###Actual drug rank###' + '\n'
+                                txt = txt + str(rank) + '\n'
+                                txt = txt + '###Top 5 predicted drugs###' + '\n'
+                                txt = txt + str(top5) + '\n\n'
+
+                        txt = txt + '#####################' + '\n'
+                        print(txt)
+                        with codecs.open(path + 'validation.txt', 'a', encoding='utf8') as f:
+                                f.write(txt)
+                                f.close()
+                dataf = pd.DataFrame(data,columns=['txn','predicted_drug','predicted_drug_name','similarity'])
+                result = pd.merge(d,dataf,how='outer',on='txn')
+                #print(result)
+                #save_file(result,path+'result.csv')
+                txt = ''
+                txt = txt + '#####################' + '\n'
+                txt = txt + str(len(set(d['drug'].unique().tolist()) & set(p))*100/len(d['drug'].unique().tolist()))+'% '+str(len(set(d['drug'].unique().tolist()) & set(p)))+'/'+str(len(d['drug'].unique().tolist())) +' '+str(len(p)) + '\n'
+                txt = txt + str(d['icd10_name'].unique().tolist()) + '\n'
+                txt = txt + '###All actual drugs###' + '\n'
+                txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
+                txt = txt + '###Actual drug rank###' + '\n'
+                txt = txt + str(rank) + '\n'
+                txt = txt + '###Top 5 predicted drugs###' + '\n'
+                txt = txt + str(top5) + '\n'
+                txt = txt + '#####################' + '\n'
+                #print(txt)
+                #with codecs.open(path+'validation.txt', 'a', encoding='utf8') as f:
+                #        f.write(txt)
+                #        f.close()
+
+
+
+        #df = pd.read_csv(path+'result.csv',index_col=0)
+        #df.to_csv(path+'result.csv')
+
+def save_projector():
+        #word embedding projector
+        df = pd.read_csv(path+'drug_name.csv')
+        df['drug_name'] = df['drug_name'].str.strip()
+        df['drug_name'] = df['drug_name'].apply(lambda x: re.sub('\n', '', str(x)))
+        drug_map = dict(zip(df['drug'], df['drug_name']))
+        model = gensim.models.Word2Vec.load(path+'model')
+        icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
+        icd10['cdesc'] = icd10['cdesc'].str.strip()
+        icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
+
+        model = gensim.models.Word2Vec.load(path+'model')
+
+        meta = []
+        data = ''
+        remove_file(path+'meta.tsv')
+        remove_file(path+'data.tsv')
+        for i in model.wv.vocab:
+                found = False
+                if i in drug_map:
+                        meta.append(['drug',drug_map[i]])
+                        found = True
+                if i in icd10_map and not found:
+                        meta.append(['icd10',icd10_map[i]])
+                        found = True
+                if found:
+                        d = model.wv[i]
+                        data = data + '\t'.join(str(x) for x in d) + '\n'
+
+        meta_df = pd.DataFrame(meta, columns=['type','name'])
+        meta_df.to_csv(path+'meta.tsv', sep = '\t', index=False)
+
+        with codecs.open(path+'data.tsv', 'w', encoding='utf8') as f:
+                f.write(data)
                 f.close()
-
-'''
-
-#df = pd.read_csv(path+'result.csv',index_col=0)
-#df.to_csv(path+'result.csv')
-
-
-df = pd.read_csv(path+'drug_name.csv')
-df['drug_name'] = df['drug_name'].str.strip()
-drug_map = dict(zip(df['drug'], df['drug_name']))
-model = gensim.models.Word2Vec.load(path+'model')
-icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
-icd10['cdesc'] = icd10['cdesc'].str.strip()
-icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
-
-model = gensim.models.Word2Vec.load(path+'model')
-
-meta = []
-data = ''
-for i in model.wv.vocab:
-        d = model.wv[i]
-        data = data +'\t'.join(str(x) for x in d) + '\n'
-
-        if i in drug_map:
-                meta.append([i,drug_map[i]])
-        if i in icd10_map:
-                meta.append([i,icd10_map[i]])
-
-meta_df = pd.DataFrame(meta, columns=['type','name'])
-meta_df.to_csv(path+'meta.tsv', sep = '\t', index=False)
-
-with codecs.open(path+'data.tsv', 'w', encoding='utf8') as f:
-        f.write(data)
-        f.close()
+validate()
+#save_projector()

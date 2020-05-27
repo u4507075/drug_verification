@@ -22,16 +22,16 @@ from keras import backend as K
 import codecs
 import re
 num_cores = 4
-
+'''
 num_CPU = 1
 num_GPU = 0
 
-config = tf.ConfigProto(intra_op_parallelism_threads=num_cores,\
+config = tf.compat.v1.ConfigProto(intra_op_parallelism_threads=num_cores,\
         inter_op_parallelism_threads=num_cores, allow_soft_placement=True,\
         device_count = {'CPU' : num_CPU, 'GPU' : num_GPU})
-session = tf.Session(config=config)
+session = tf.compat.v1.Session(config=config)
 K.set_session(session)
-
+'''
 path = '../../secret/data/'
 '''
 df = pd.read_csv(path+'trainingset/vec/dru.csv',index_col=0)
@@ -177,22 +177,22 @@ while True:
         text = chain2(100, df, 'drug', 'icd10')
         print(text)
 '''
-'''
-#chain 1 model without weight
-df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
-df = df[['drug','icd10']]
+def train_chain1(filename,modelname):
+        #chain 1 model without weight
+        df = pd.read_csv(path+'trainingset/raw/'+filename+'.csv',index_col=0)
+        df = df[['drug','icd10']]
+        #model = gensim.models.Word2Vec(chain(1000,df,'drug','icd10'), compute_loss = True, sg = 1)
+        #model.save(path+modelname)
 
-#model = gensim.models.Word2Vec(chain(1000,df,'drug','icd10'), compute_loss = True, sg = 1)
-#model.save(path+'model')
+        for i in range(100000):
+                text = chain(100,df,'drug','icd10')
+                model = gensim.models.Word2Vec.load(path + modelname)
+                model.build_vocab(text, update=True)
+                model.train(text, total_examples=model.corpus_count, compute_loss = True, epochs=10)
+                print(i)
+                print(model.get_latest_training_loss())
+                model.save(path+modelname)
 
-for i in range(100000):
-        text = chain(100,df,'drug','icd10')
-        model = gensim.models.Word2Vec.load(path + 'model')
-        model.build_vocab(text, update=True)
-        model.train(text, total_examples=model.corpus_count, compute_loss = True, epochs=10)
-        print(model.get_latest_training_loss())
-        model.save(path+'model')
-'''
 '''
 #chain 2 model2 with weight
 df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
@@ -237,38 +237,46 @@ model = gensim.models.Word2Vec(sent, sg = 1)
 model.save(path+'test_model')
 '''
 
-'''
-df = pd.read_csv(path+'testset/raw/dru.csv',index_col=0)
-df['drug_name'] = df['drug_name'].str.strip()
-drug_map = dict(zip(df['drug'], df['drug_name']))
-model = gensim.models.Word2Vec.load(path+'model2')
-#print(model.wv.vocab)
-icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
-icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
-x = 'J029' #Acute pharyngitis, unspecified
-y = 'AMOT08' #Amoxicillin cap 500 mg
-y = 'BERT01' #Beramol Tab  500  mg
-y = 'DOST02' #,*(d) Dosanac Tab 50 mg,1,N200
-#x = 'M0699' #Rheumatoid arthritis, unspecified Site unspecified
-x = 'C795' #Secondary malignant neoplasm of bone and bone marrow
-x = 'R509' #Fever, unspecified
-x = 'E104'
-y = 'DOUT01'
-x = 'M8195'
-y = 'PROI11'
-similar_words = model.wv.most_similar(positive=[x],topn=50)
-#print(icd10_map['J029'])
-if x in icd10_map:
-        print(icd10_map[x])
-if x in drug_map:
-        print(drug_map[x])
-for i in range(len(similar_words)):
-        if similar_words[i][0] in icd10_map:
-                print(str(similar_words[i][1])+' '+icd10_map[similar_words[i][0]])
-        if similar_words[i][0] in drug_map:
-                print(str(similar_words[i][1])+' '+drug_map[similar_words[i][0]])
+def test_chain(prefix=''):
+        df = pd.read_csv(path+'testset/raw/'+prefix+'dru.csv',index_col=0)
+        df['drug_name'] = df['drug_name'].str.strip()
+        drug_map = dict(zip(df['drug'], df['drug_name']))
+        model = gensim.models.Word2Vec.load(path+prefix+'model')
+        #print(model.wv.vocab)
+        icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
+        icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
+        x = 'J029' #Acute pharyngitis, unspecified
+        y = 'AMOT08' #Amoxicillin cap 500 mg
+        y = 'BERT01' #Beramol Tab  500  mg
+        y = 'DOST02' #,*(d) Dosanac Tab 50 mg,1,N200
+        x = 'M0699' #Rheumatoid arthritis, unspecified Site unspecified
+        #x = 'C795' #Secondary malignant neoplasm of bone and bone marrow
+        #x = 'R509' #Fever, unspecified
+        #x = 'E104'
+        y = 'DOUT01'
+        #x = 'M8195'
+        y = 'PROI11'
+        x = 'Z94' #Transplanted organ and tissue status
+        x = 'K250' #Gastric ulcer: acutewith haemorrhage
+        x = 'K226'#K226,Gastro-oesophageal laceration-haemorrhage syndrome
+        x = 'K590' #K21,Gastro-oesophageal reflux disease
+        x = 'L209'#L209,"Atopic dermatitis, unspecified
+        x = 'J029'  # Acute pharyngitis, unspecified
+        x = 'H811' #BPPV
+        similar_words = model.wv.most_similar(positive=[x],topn=300)
+        #print(icd10_map['J029'])
+        if x in icd10_map:
+                print(icd10_map[x])
+        if x in drug_map:
+                print(drug_map[x])
+        for i in range(len(similar_words)):
+                if similar_words[i][0] in icd10_map:
+                        #print(str(similar_words[i][1])+' '+icd10_map[similar_words[i][0]])
+                        pass
+                if similar_words[i][0] in drug_map:
+                        print(str(similar_words[i][1])+' '+drug_map[similar_words[i][0]])
 
-'''
+
 def validate():
         df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
         df['drug_name'] = df['drug_name'].str.strip()
@@ -415,5 +423,122 @@ def save_projector():
         with codecs.open(path+'data.tsv', 'w', encoding='utf8') as f:
                 f.write(data)
                 f.close()
-validate()
+
+def save_rank():
+        df = pd.read_csv(path+'drug_name.csv')
+        df['drug_name'] = df['drug_name'].str.strip()
+        df['drug_name'] = df['drug_name'].apply(lambda x: re.sub('\n', '', str(x)))
+        drug_map = dict(zip(df['drug'], df['drug_name']))
+        model = gensim.models.Word2Vec.load(path+'model')
+        icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
+        icd10['cdesc'] = icd10['cdesc'].str.strip()
+        icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
+
+        model = gensim.models.Word2Vec.load(path+'model')
+        data = []
+        for i in model.wv.vocab:
+                d = []
+                found = False
+                if i in drug_map:
+                        d.append('drug')
+                        d.append(i)
+                        found = True
+                if i in icd10_map and not found:
+                        d.append('icd10')
+                        d.append(i)
+                        found = True
+                if found:
+                        similar_words = model.wv.most_similar(positive=[i], topn=5000)
+                        n1 = 0
+                        n2 = 0
+                        drug_list = []
+                        icd10_list = []
+                        for j in range(len(similar_words)):
+                                if similar_words[j][0] in drug_map:
+                                        if n1 < 50:
+                                                drug_list.append(similar_words[j][0])
+                                                drug_list.append(similar_words[j][1])
+                                        n1 = n1+1
+                                if similar_words[j][0] in icd10_map:
+                                        if n2 < 50:
+                                                icd10_list.append(similar_words[j][0])
+                                                icd10_list.append(similar_words[j][1])
+                                        n2 = n2+1
+                        while True:
+                                if len(drug_list) < 100:
+                                        drug_list.append(np.NaN)
+                                else:
+                                        break
+                        while True:
+                                if len(icd10_list) < 100:
+                                        icd10_list.append(np.NaN)
+                                else:
+                                        break
+                        d = d + drug_list + icd10_list
+                        data.append(d)
+                #break
+        dru = []
+        dx = []
+        for i in range(50):
+                dru.append('drug_'+str(i+1))
+                dru.append('drug_s' + str(i + 1))
+                dx.append('icd10_' + str(i + 1))
+                dx.append('icd10_s' + str(i + 1))
+        col = ['type','keyword']+dru+dx
+        df = pd.DataFrame(data,columns=col)
+        print(df)
+        df.to_csv(path+'similarity.csv')
+
+def save_rank_v():
+        df = pd.read_csv(path+'drug_name.csv')
+        df['drug_name'] = df['drug_name'].str.strip()
+        df['drug_name'] = df['drug_name'].apply(lambda x: re.sub('\n', '', str(x)))
+        drug_map = dict(zip(df['drug'], df['drug_name']))
+        model = gensim.models.Word2Vec.load(path+'model')
+        icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
+        icd10['cdesc'] = icd10['cdesc'].str.strip()
+        icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
+
+        model = gensim.models.Word2Vec.load(path+'model')
+        data = []
+        for i in model.wv.vocab:
+                type = ''
+                keyword = ''
+                found = False
+                if i in drug_map:
+                        type = 'drug'
+                        keyword = i
+                        found = True
+                if i in icd10_map and not found:
+                        type = 'icd10'
+                        keyword = i
+                        found = True
+                if found and type != '' and keyword != '':
+                        similar_words = model.wv.most_similar(positive=[i], topn=5000)
+                        n1 = 0
+                        n2 = 0
+                        for j in range(len(similar_words)):
+                                if similar_words[j][0] in drug_map:
+                                        if n1 < 50:
+                                                data.append([type,keyword,'drug',similar_words[j][0],similar_words[j][1]])
+                                        n1 = n1+1
+                                if similar_words[j][0] in icd10_map:
+                                        if n2 < 50:
+                                                data.append([type,keyword,'icd10',similar_words[j][0],similar_words[j][1]])
+                                        n2 = n2+1
+
+        col = ['type','keyword','type_s','keyword_s','similarity']
+        df = pd.DataFrame(data,columns=col)
+        df = df.sort_values(by=['type','keyword','type_s','keyword_s','similarity'], ascending=[True,True,True,True,False])
+        df.index.name = 'id'
+        print(df)
+        df.to_csv(path+'similarity.csv')
+
+#validate()
 #save_projector()
+#save_rank()
+#save_rank_v()
+#train_chain1('dru','model')
+#train_chain1('idru','imodel')
+#test_chain()
+#test_chain(prefix='i')

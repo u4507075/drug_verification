@@ -181,17 +181,30 @@ def train_chain1(filename,modelname):
         #chain 1 model without weight
         df = pd.read_csv(path+'trainingset/raw/'+filename+'.csv',index_col=0)
         df = df[['drug','icd10']]
-        #model = gensim.models.Word2Vec(chain(1000,df,'drug','icd10'), compute_loss = True, sg = 1)
-        #model.save(path+modelname)
 
-        for i in range(100000):
+        t = 1000000
+        p = 100
+        s = 0
+        model = None
+        for i in range(int(t/p),-1,-1*p):
+                file = Path(path+modelname+ '_'+str(i))
+                if file.is_file():
+                        model = gensim.models.Word2Vec.load(path + modelname + '_'+str(i))
+                        s = i
+                        break
+        if model is None:
+                model = gensim.models.Word2Vec(chain(1000,df,'drug','icd10'), compute_loss = True, sg = 1)
+        print(s)
+        for i in range(s+1,t):
                 text = chain(100,df,'drug','icd10')
-                model = gensim.models.Word2Vec.load(path + modelname)
+                #model = gensim.models.Word2Vec.load(path + modelname)
                 model.build_vocab(text, update=True)
                 model.train(text, total_examples=model.corpus_count, compute_loss = True, epochs=10)
                 print(i)
                 print(model.get_latest_training_loss())
-                model.save(path+modelname)
+                if i % p == 0:
+                        model.save(path+modelname+'_'+str(i))
+                        print('saved '+modelname+'_'+str(i))
 
 '''
 #chain 2 model2 with weight
@@ -260,10 +273,13 @@ def test_chain(prefix=''):
         x = 'K250' #Gastric ulcer: acutewith haemorrhage
         x = 'K226'#K226,Gastro-oesophageal laceration-haemorrhage syndrome
         x = 'K590' #K21,Gastro-oesophageal reflux disease
-        x = 'L209'#L209,"Atopic dermatitis, unspecified
-        x = 'J029'  # Acute pharyngitis, unspecified
-        x = 'H811' #BPPV
-        similar_words = model.wv.most_similar(positive=[x],topn=300)
+        #x = 'L209'#L209,"Atopic dermatitis, unspecified
+        #x = 'J029'  # Acute pharyngitis, unspecified
+        #x = 'H811' #BPPV
+        x = 'N179'#N179  Acute renal failure, unspecified
+        x = 'M329'#  Systemic lupus erythematosus, unspecified
+        x = 'C910'#  Acute lymphoblastic leukaemia
+        similar_words = model.wv.most_similar(positive=[x],topn=100)
         #print(icd10_map['J029'])
         if x in icd10_map:
                 print(icd10_map[x])
@@ -276,64 +292,44 @@ def test_chain(prefix=''):
                 if similar_words[i][0] in drug_map:
                         print(str(similar_words[i][1])+' '+drug_map[similar_words[i][0]])
 
-
-def validate():
-        df = pd.read_csv(path+'trainingset/raw/dru.csv',index_col=0)
+def validate(model_list, prefix='', save=False, n=None):
+        df = pd.read_csv(path+'trainingset/raw/'+prefix+'dru.csv',index_col=0)
         df['drug_name'] = df['drug_name'].str.strip()
         drug_map = dict(zip(df['drug'], df['drug_name']))
-        model = gensim.models.Word2Vec.load(path+'model')
+        #model = gensim.models.Word2Vec.load(path+'model')
         icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
         icd10['cdesc'] = icd10['cdesc'].str.strip()
         icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
 
-        print(len(drug_map))
-        print(len(model.wv.vocab))
-        df = pd.read_csv(path+'testset/raw/dru.csv',index_col=0)
+        #print(len(drug_map))
+        #print(len(model.wv.vocab))
+        df = pd.read_csv(path+'testset/raw/'+prefix+'dru.csv',index_col=0)
+        if n is not None:
+                df = df.head(n)
         df['drug_name'] = df['drug_name'].str.strip()
         df['icd10_name'] = df['icd10'].map(icd10_map)
         df['icd10_name'] = df['icd10_name'].str.strip()
-        remove_file(path+'result.csv')
-        remove_file(path+'validation.txt')
-        for txn in df['txn'].unique().tolist():
-                d = df[df['txn']==txn]
-                #print(d)
-                p = []
-                dx = []
-                for x in d['icd10'].unique().tolist():
-                        if x in model.wv.vocab and x in icd10_map:
-                                dx.append(x)
+        #remove_file(path+'validation.csv')
+        #remove_file(path+prefix+'validation.txt')
+        for m in model_list:
+                model = gensim.models.Word2Vec.load(path+m)
                 data = []
-                rank = []
-                top5 = []
-                if len(dx)>0:
+                for txn in df['txn'].unique().tolist():
+                        d = df[df['txn']==txn]
+                        #print(d)
+                        #p = []
+                        #dx = []
+                        #for x in d['icd10'].unique().tolist():
+                        #        if x in model.wv.vocab and x in icd10_map:
+                        #                dx.append(x)
+
+                        #rank = []
+                        #top5 = []
                         '''
-                        #Approach 1: calcualte similar wards from all dx at once
-                        similar_words = model.wv.most_similar(positive=dx, topn=5000)
-                        n = 0
-                        for i in range(len(similar_words)):
-                                da = [txn]
-                                if similar_words[i][0] in drug_map:
-                                        da.append(similar_words[i][0])
-                                        da.append(drug_map[similar_words[i][0]])
-                                        da.append(similar_words[i][1])
-                                        p.append(similar_words[i][0])
-                                        #print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
-                                        data.append(da)
-                                        if similar_words[i][0] in d['drug'].unique().tolist():
-                                                rank.append([n,drug_map[similar_words[i][0]]])
-                                        if len(top5) < 5:
-                                                top5.append([n, drug_map[similar_words[i][0]]])
-                                        n = n+1
-                        '''
-                        #Approach 2: get each dx and treat the rest of dx is negative
-                        txt = ''
-                        txt = txt + '#####################' + '\n'
-                        txt = txt + str(d['icd10_name'].unique().tolist()) + '\n\n'
-                        for dd in dx:
-                                rank = []
-                                top5 = []
-                                neg = dx.copy().remove(dd)
-                                similar_words = model.wv.most_similar(positive=[dd], negative=neg, topn=5000)
+                        #if len(dx)>0:
+                                
+                                #Approach 1: calcualte similar wards from all dx at once
+                                similar_words = model.wv.most_similar(positive=dx, topn=5000)
                                 n = 0
                                 for i in range(len(similar_words)):
                                         da = [txn]
@@ -342,48 +338,84 @@ def validate():
                                                 da.append(drug_map[similar_words[i][0]])
                                                 da.append(similar_words[i][1])
                                                 p.append(similar_words[i][0])
-                                                # print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
+                                                #print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
                                                 data.append(da)
                                                 if similar_words[i][0] in d['drug'].unique().tolist():
-                                                        rank.append([n, drug_map[similar_words[i][0]]])
+                                                        rank.append([n,drug_map[similar_words[i][0]]])
                                                 if len(top5) < 5:
-                                                        top5.append([similar_words[i][1], drug_map[similar_words[i][0]]])
-                                                n = n + 1
+                                                        top5.append([n, drug_map[similar_words[i][0]]])
+                                                n = n+1
+                                
+                                
+                                #txt = ''
+                                #txt = txt + '#####################' + '\n'
+                                #txt = txt + str(d['icd10_name'].unique().tolist()) + '\n\n'
+                                #for dd in dx:
+                        '''
+                        # Approach 2: get each dx and treat the rest of dx is negative
+                        dx = d['icd10'].unique().tolist()
+                        for x in dx:
+                                if x in model.wv.vocab and x in icd10_map:
+                                        rank = []
+                                        top5 = []
+                                        neg = dx.copy().remove(x)
+                                        similar_words = model.wv.most_similar(positive=[x], negative=neg, topn=len(model.wv.vocab))
+                                        detected_drug = []
+                                        n = 1
+                                        for i in range(len(similar_words)):
+                                                #da = [txn]
+                                                if similar_words[i][0] in drug_map:
+                                                        #da.append(similar_words[i][0])
+                                                        #da.append(drug_map[similar_words[i][0]])
+                                                        #da.append(similar_words[i][1])
+                                                        #p.append(similar_words[i][0])
+                                                        # print(str(similar_words[i][1]) + ' ' + drug_map[similar_words[i][0]])
+                                                        #data.append(da)
+                                                        if similar_words[i][0] in d['drug'].unique().tolist():
+                                                                detected_drug.append(similar_words[i][0])
+                                                                #rank.append([n, drug_map[similar_words[i][0]]])
+                                                                data.append([txn,icd10_map[x],drug_map[similar_words[i][0]],(n*100)/len(drug_map)])
+                                                        #if len(top5) < 5:
+                                                        #        top5.append([similar_words[i][1], drug_map[similar_words[i][0]]])
+                                                        n = n + 1
+                                        for i in range(len(d['drug'].unique().tolist())):
+                                                if d['drug'].unique().tolist()[i] not in detected_drug:
+                                                        drug_name = d['drug'].unique().tolist()[i]
+                                                        if drug_name in drug_map:
+                                                                drug_name = drug_map[drug_name]
+                                                        data.append([txn, icd10_map[x], drug_name, len(drug_map)])
+                                else:
+                                        for i in range(len(d['drug'].unique().tolist())):
+                                                drug_name = d['drug'].unique().tolist()[i]
+                                                if drug_name in drug_map:
+                                                        drug_name = drug_map[drug_name]
+                                                icd10_name = x
+                                                if x in icd10_map:
+                                                        icd10_name = icd10_map[x]
+                                                data.append([txn, icd10_name, drug_name, len(drug_map)])
+                                        #txt = txt + str(icd10_map[dd]) + '\n'
+                                        #txt = txt + '###All actual drugs###' + '\n'
+                                        #txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
+                                        #txt = txt + '###Actual drug rank###' + '\n'
+                                        #txt = txt + str(rank) + '\n'
+                                        #txt = txt + '###Top 5 predicted drugs###' + '\n'
+                                        #txt = txt + str(top5) + '\n\n'
 
-                                txt = txt + str(icd10_map[dd]) + '\n'
-                                txt = txt + '###All actual drugs###' + '\n'
-                                txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
-                                txt = txt + '###Actual drug rank###' + '\n'
-                                txt = txt + str(rank) + '\n'
-                                txt = txt + '###Top 5 predicted drugs###' + '\n'
-                                txt = txt + str(top5) + '\n\n'
-
-                        txt = txt + '#####################' + '\n'
-                        print(txt)
-                        with codecs.open(path + 'validation.txt', 'a', encoding='utf8') as f:
-                                f.write(txt)
-                                f.close()
-                dataf = pd.DataFrame(data,columns=['txn','predicted_drug','predicted_drug_name','similarity'])
-                result = pd.merge(d,dataf,how='outer',on='txn')
-                #print(result)
-                #save_file(result,path+'result.csv')
-                txt = ''
-                txt = txt + '#####################' + '\n'
-                txt = txt + str(len(set(d['drug'].unique().tolist()) & set(p))*100/len(d['drug'].unique().tolist()))+'% '+str(len(set(d['drug'].unique().tolist()) & set(p)))+'/'+str(len(d['drug'].unique().tolist())) +' '+str(len(p)) + '\n'
-                txt = txt + str(d['icd10_name'].unique().tolist()) + '\n'
-                txt = txt + '###All actual drugs###' + '\n'
-                txt = txt + str(d['drug_name'].unique().tolist()) + '\n'
-                txt = txt + '###Actual drug rank###' + '\n'
-                txt = txt + str(rank) + '\n'
-                txt = txt + '###Top 5 predicted drugs###' + '\n'
-                txt = txt + str(top5) + '\n'
-                txt = txt + '#####################' + '\n'
-                #print(txt)
-                #with codecs.open(path+'validation.txt', 'a', encoding='utf8') as f:
-                #        f.write(txt)
-                #        f.close()
-
-
+                                #txt = txt + '#####################' + '\n'
+                                #print(txt)
+                                #with codecs.open(path + prefix+'validation.txt', 'a', encoding='utf8') as f:
+                                #        f.write(txt)
+                                #        f.close()
+                result = pd.DataFrame(data, columns=['txn', 'icd10', 'drug_name', 'rank'])
+                table = pd.pivot_table(result, values=['rank'], index=['icd10', 'drug_name'],
+                                       aggfunc={'rank': [np.mean, np.min, np.max, np.count_nonzero]})
+                if save:
+                        result.to_csv(path + prefix+'validation_'+m+'.csv')
+                        table.to_csv(path+prefix+'validation_pivot_'+m+'.csv')
+                        print(result)
+                        print(table)
+                print(m)
+                print(result['rank'].mean(axis=0))
 
         #df = pd.read_csv(path+'result.csv',index_col=0)
         #df.to_csv(path+'result.csv')
@@ -489,17 +521,16 @@ def save_rank():
         print(df)
         df.to_csv(path+'similarity.csv')
 
-def save_rank_v():
+def save_rank_v(modelname):
         df = pd.read_csv(path+'drug_name.csv')
         df['drug_name'] = df['drug_name'].str.strip()
         df['drug_name'] = df['drug_name'].apply(lambda x: re.sub('\n', '', str(x)))
         drug_map = dict(zip(df['drug'], df['drug_name']))
-        model = gensim.models.Word2Vec.load(path+'model')
+        model = gensim.models.Word2Vec.load(path+modelname)
         icd10 = pd.read_csv(path + 'icd10.csv', index_col=0)
         icd10['cdesc'] = icd10['cdesc'].str.strip()
         icd10_map = dict(zip(icd10['code'], icd10['cdesc']))
 
-        model = gensim.models.Word2Vec.load(path+'model')
         data = []
         for i in model.wv.vocab:
                 type = ''
@@ -534,11 +565,16 @@ def save_rank_v():
         print(df)
         df.to_csv(path+'similarity.csv')
 
-#validate()
+
 #save_projector()
 #save_rank()
-#save_rank_v()
+#save_rank_v('model_58800')
 #train_chain1('dru','model')
 #train_chain1('idru','imodel')
 #test_chain()
 #test_chain(prefix='i')
+#for i in range(100,61500,1000):
+#        validate(['model_'+str(i)],n=10000,prefix='')
+validate(['model_61000'],n=10000,prefix='',save=True)
+#validate(prefix='i')
+
